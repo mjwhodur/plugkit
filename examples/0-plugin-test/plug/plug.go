@@ -8,7 +8,7 @@ import (
 	"github.com/mjwhodur/plugkit/plug"
 )
 
-var p *plug.BasicHandler
+var p *plug.Plug
 
 func main() {
 	p = plug.New()
@@ -24,6 +24,6 @@ func main() {
 		})
 		p.Finish("Operation complete", codes.OperationSuccess)
 	})
-	plug.Main(p)
+	p.Main()
 
 }

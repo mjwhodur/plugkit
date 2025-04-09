@@ -8,11 +8,11 @@ Just structs, CBOR, pipes and a handshake.
 
 PlugKit is a micro-framework that lets you:
 
-- run plugins as separate processes
+- create and run plugins as separate processes (we call them simply plugs)
 - communicate with them over `stdin`/`stdout`
 - pass arbitrary Go structs encoded with CBOR
-- use bidirectional message routing (the plugin can speak first!)
-- gracefully terminate a plugin whenever you want (`Finish`)
+- use bidirectional message routing
+- gracefully terminate a plug whenever you want (`Finish`)
 
 It's like HashiCorp’s `go-plugin`, but:
 - without the pain
