@@ -10,7 +10,7 @@ import (
 func main() {
 	fmt.Println("Hello, client")
 
-	c := client.NewClient("./plug")
+	c := client.NewClient("./plugin")
 	c.HandleMessageType("pong", Pong)
 	c.StartLocal()
 	c.RunCommand("ping", &shared.Ping{})

@@ -12,6 +12,7 @@ import (
 	"sync"
 )
 
+// Client is a standard plug host. It supports basic operations.
 type Client struct {
 	encoder   *cbor.Encoder
 	decoder   *cbor.Decoder
@@ -21,9 +22,7 @@ type Client struct {
 	Wg        *sync.WaitGroup
 }
 
-func (c *Client) DownloadAndStart() {
-}
-
+// StartLocal starts local plug
 func (c *Client) StartLocal() {
 	cmd := exec.Command(c.command)
 	stdin, e1 := cmd.StdinPipe()
@@ -53,6 +52,7 @@ func (c *Client) StartLocal() {
 	go c.loop()
 }
 
+// NewClient returns a pre-setup simple client for a plug.
 func NewClient(name string) *Client {
 	return &Client{
 		command:  name,
@@ -61,12 +61,13 @@ func NewClient(name string) *Client {
 	}
 }
 
+// RunCommand sends arbitrary message to a plug. Plug must understand the message.
 func (c *Client) RunCommand(name string, v any) {
 	fmt.Println("Sending message type", name)
 	err := c.encoder.Encode(&messages.Envelope{
 		Version: 0,
 		Type:    name,
-		//Raw:     pluginsdk.MustRaw(v),
+		Raw:     plugkit.MustRaw(v),
 	})
 	if err != nil {
 		fmt.Println("Error during encoding of the envelope")
@@ -74,6 +75,7 @@ func (c *Client) RunCommand(name string, v any) {
 	}
 }
 
+// Main loop for the plug
 func (c *Client) loop() {
 	fmt.Println("Starting loop")
 	// FIXME: Add handshake
@@ -113,16 +115,19 @@ func (c *Client) loop() {
 	}
 }
 
+// Kill demands graceful shutdown of a plug.
 func (c *Client) Kill() {
 	c.RunCommand("stopcommand", &messages.StopCommand{
 		Reason: codes.OperationCancelledByClient,
 	})
 }
 
+// HandleMessageType adds handler for incoming messages from the plug to the host.
 func (h *Client) HandleMessageType(name string, handler func([]byte)) {
 	h.Handlers[name] = handler
 }
 
+// Respond is a basic function for sending message from host to a plug.
 func (h *Client) Respond(t string, v any) {
 	// FIXME: Unhandled error here
 	// FIXME: Test
@@ -140,6 +145,7 @@ func (h *Client) Init() {
 	//FIXME: Implement me
 }
 
+// SetCommand is
 func (c *Client) SetCommand(command string) {
 	c.command = command
 }

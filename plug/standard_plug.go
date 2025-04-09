@@ -15,6 +15,7 @@ type BasicHandler struct {
 	encoder  *cbor.Encoder
 }
 
+// New creates basic plug that supports basic options
 func New() *BasicHandler {
 	h := &BasicHandler{}
 	h.Handlers = make(map[string]func([]byte))
@@ -27,10 +28,12 @@ func New() *BasicHandler {
 	return h
 }
 
+// HandleMessageType registers a function that decodes a message of particular type to process it
 func (h *BasicHandler) HandleMessageType(name string, handler func([]byte)) {
 	h.Handlers[name] = handler
 }
 
+// Main runs the main loop for a plugin
 func Main(h *BasicHandler) {
 	// FIXME: Add handshake
 	// FIXME: Add exit and possibly other signals
@@ -48,6 +51,8 @@ func Main(h *BasicHandler) {
 	}
 }
 
+// Respond sends raw response to the plugin host. It encapsulates the information
+// in an envelope
 func (h *BasicHandler) Respond(t string, v any) {
 	// FIXME: Unhandled error here
 	// FIXME: Test
