@@ -1,6 +1,6 @@
 # PlugKit Docs
 
-```markdown
+
 **PlugKit** to stupidly simple, stream-capable plugin runtime for Go.  
 No gRPC. No protobuf. No codegen.  
 Just structs, CBOR, pipes and a handshake.
@@ -20,4 +20,4 @@ It's like HashiCorp’s `go-plugin`, but:
 - without reflection
 - without type registries
 - **with streaming message support** 😎 (in future)
-```
+
