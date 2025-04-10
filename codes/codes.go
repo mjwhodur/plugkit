@@ -94,6 +94,6 @@ func (r PluginExitReason) String() string {
 	case ExitStatusOutOfRange:
 		return "ExitStatusOutOfRange"
 	default:
-		panic("unhandled default case")
+		return "UnknownExternalStatusCode"
 	}
 }
