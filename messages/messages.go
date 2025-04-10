@@ -13,6 +13,11 @@ type Envelope struct {
 	Raw     cbor.RawMessage `cbor:"data"`
 }
 
+type Result struct {
+	Type  string `cbor:"type"`
+	Value any
+}
+
 // StopCommand - handling host-to-plug exit demand.
 type StopCommand struct {
 	Reason codes.PluginExitReason `cbor:"reason"`

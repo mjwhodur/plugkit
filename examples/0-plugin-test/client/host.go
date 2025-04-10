@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mjwhodur/plugkit/client"
 	"github.com/mjwhodur/plugkit/examples/0-plugin-test/shared"
@@ -12,9 +13,12 @@ func main() {
 
 	c := client.NewClient("./plugin")
 	c.HandleMessageType("pong", Pong)
-	c.StartLocal()
-	c.RunCommand("ping", &shared.Ping{})
-	c.Wg.Wait()
+	err := c.StartLocal()
+	if err != nil {
+		return
+	}
+	c.RunCommand("ping", &shared.Ping{}) //nolint:errcheck
+	c.Wait()
 }
 
 func Pong(b []byte) {

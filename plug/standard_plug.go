@@ -1,17 +1,18 @@
 package plug
 
 import (
-	"fmt"
-	"github.com/fxamacker/cbor/v2"
-	"github.com/mjwhodur/plugkit"
-	"github.com/mjwhodur/plugkit/codes"
-	"github.com/mjwhodur/plugkit/messages"
+	"errors"
 	"os"
+
+	"github.com/fxamacker/cbor/v2"
+	"github.com/mjwhodur/plugkit/codes"
+	"github.com/mjwhodur/plugkit/helpers"
+	"github.com/mjwhodur/plugkit/messages"
 )
 
 // Plug is a most standard type of plug.
 type Plug struct {
-	Handlers map[string]func([]byte)
+	Handlers map[string]func([]byte) (result *messages.Result, exitReason codes.PluginExitReason, e error)
 	decoder  *cbor.Decoder
 	encoder  *cbor.Encoder
 }
@@ -19,52 +20,78 @@ type Plug struct {
 // New creates basic plug that supports basic options
 func New() *Plug {
 	h := &Plug{}
-	h.Handlers = make(map[string]func([]byte))
+	h.Handlers = make(map[string]func([]byte) (result *messages.Result, exitReason codes.PluginExitReason, e error))
 	h.decoder = cbor.NewDecoder(os.Stdin)
 	h.encoder = cbor.NewEncoder(os.Stdout)
 
 	// FIXME: Fix message to correctly support cleanup and disposing
-	h.Handlers["exit"] = func(p []byte) { os.Exit(0) }
+	h.Handlers["exit"] = func(_ []byte) (result *messages.Result, exitReason codes.PluginExitReason, e error) {
+		return nil, codes.OperationCancelledByClient, nil
+	}
 
 	return h
 }
 
 // HandleMessageType registers a function that decodes a message of particular type to process it
-func (h *Plug) HandleMessageType(name string, handler func([]byte)) {
+func (h *Plug) HandleMessageType(name string, handler func([]byte) (*messages.Result, codes.PluginExitReason, error)) {
 	// FIXME: Make this function more generic - it needs to have nice interface
 	h.Handlers[name] = handler
 }
 
 // Main runs the main loop for a plugin
-func (h *Plug) Main() {
+func (h *Plug) Main() error {
 	// FIXME: Add handshake
 	// FIXME: Add exit and possibly other signals
-	for {
-		var msg messages.Envelope
-		if err := h.decoder.Decode(&msg); err != nil {
-			fmt.Fprintln(os.Stderr, "decode error:", err)
-			os.Exit(1)
+	exitCode := codes.OperationSuccess
+
+	var msg messages.Envelope
+	if err := h.decoder.Decode(&msg); err != nil {
+		h.Finish("Malformed message received", codes.HostToPluginCommunicationError)
+
+	}
+
+	if msg.Type == string(codes.Unsupported) {
+		h.Finish("Unsupported message received from host", codes.PluginToHostCommunicationError)
+	}
+
+	if handler, ok := h.Handlers[msg.Type]; ok {
+		endMessage := ""
+		resp, exitCode, err := handler(msg.Raw)
+		if err != nil {
+			endMessage = err.Error()
 		}
-		if handler, ok := h.Handlers[msg.Type]; ok {
-			handler(msg.Raw)
-		} else {
-			h.Respond(string(codes.Unsupported), &messages.MessageUnsupported{})
+		if resp != nil {
+			h.Respond(resp.Type, resp.Value)
 		}
+		h.Finish(endMessage, exitCode)
+
+	} else {
+		h.Respond(string(codes.Unsupported), &messages.MessageUnsupported{})
+		h.Finish("Unsupported message send to host", codes.HostToPluginCommunicationError)
+
+	}
+
+	switch exitCode {
+	case codes.OperationSuccess:
+		return nil
+
+	default:
+		// FIXME: Handle the exit codes to messages?
+		return errors.New(string(rune(exitCode)))
 	}
 }
 
 // Respond sends raw response to the plugin host. It encapsulates the information
 // in an envelope
 func (h *Plug) Respond(t string, v any) {
-	// FIXME: Unhandled error here
-	// FIXME: Test
-	h.encoder.Encode(messages.Envelope{
+	err := h.encoder.Encode(messages.Envelope{
 		Version: 1,
 		Type:    t,
-		Raw:     plugkit.MustRaw(v),
+		Raw:     helpers.MustRaw(v),
 	})
-
+	panic(err)
 	// FIXME: No support for errors
+	// FIXME: Panics need to be handled on host side!
 }
 
 // Finish sends confirmation message and exits the plugin
@@ -74,11 +101,13 @@ func (h *Plug) Finish(message string, code codes.PluginExitReason) {
 		Message: message,
 	}
 
-	h.encoder.Encode(messages.Envelope{
+	err := h.encoder.Encode(messages.Envelope{
 		Version: 1,
 		Type:    string(codes.FinishMessage),
-		Raw:     plugkit.MustRaw(val),
+		Raw:     helpers.MustRaw(val),
 	})
-	//FIXME: It should not work like that... There has to be an exit code.
-	os.Exit(0)
+	if err != nil {
+		os.Exit(int(codes.OperationError))
+	}
+	os.Exit(int(code))
 }

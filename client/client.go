@@ -1,78 +1,93 @@
 package client
 
 import (
+	"errors"
 	"fmt"
-	"github.com/fxamacker/cbor/v2"
-	"github.com/mjwhodur/plugkit"
-	"github.com/mjwhodur/plugkit/codes"
-	"github.com/mjwhodur/plugkit/messages"
 	"io"
 	"os"
 	"os/exec"
 	"sync"
+
+	"github.com/fxamacker/cbor/v2"
+	"github.com/mjwhodur/plugkit/codes"
+	"github.com/mjwhodur/plugkit/helpers"
+	"github.com/mjwhodur/plugkit/messages"
 )
 
 // Client is a standard plug host. It supports basic operations.
 type Client struct {
-	encoder   *cbor.Encoder
-	decoder   *cbor.Decoder
-	breakChan chan bool
-	command   string
-	Handlers  map[string]func([]byte)
-	Wg        *sync.WaitGroup
+	encoder  *cbor.Encoder
+	decoder  *cbor.Decoder
+	command  string
+	Handlers map[string]func([]byte)
+	wg       *sync.WaitGroup
+	isReady  bool
 }
 
 // StartLocal starts local plug
-func (c *Client) StartLocal() {
-	cmd := exec.Command(c.command)
-	stdin, e1 := cmd.StdinPipe()
-	stdout, e2 := cmd.StdoutPipe()
-	if e1 != nil {
-		fmt.Println("STDIN PIPE ERROR")
-		panic(e1)
-	}
-	if e2 != nil {
-		fmt.Println("STDOUT PIPE ERROR")
-		panic(e2)
+func (c *Client) StartLocal() error {
+
+	if c.command == "" {
+		return errors.New("command executable is required")
 	}
 
-	if err := cmd.Start(); err != nil {
-		panic(err)
+	cmd := exec.Command(c.command) // #nosec G204
+	stdin, err := cmd.StdinPipe()
+
+	if err != nil {
+		return err
 	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	if e := cmd.Start(); e != nil {
+		return e
+	}
+
 	c.encoder = cbor.NewEncoder(stdin)
 	c.decoder = cbor.NewDecoder(stdout)
+
 	if c.decoder == nil {
-		panic("no decoder")
+		return errors.New("failed to create decoder")
 	}
 	if c.encoder == nil {
-		panic("no encoder")
+		return errors.New("failed to create encoder")
 	}
 
-	c.Wg.Add(1)
+	c.wg.Add(1)
 	go c.loop()
+	return nil
 }
 
 // NewClient returns a pre-setup simple client for a plug.
 func NewClient(name string) *Client {
+	isReady := name != ""
+
 	return &Client{
 		command:  name,
 		Handlers: make(map[string]func([]byte)),
-		Wg:       &sync.WaitGroup{},
+		wg:       &sync.WaitGroup{},
+		isReady:  isReady,
 	}
 }
 
 // RunCommand sends arbitrary message to a plug. Plug must understand the message.
-func (c *Client) RunCommand(name string, v any) {
-	fmt.Println("Sending message type", name)
+func (c *Client) RunCommand(name codes.MessageCode, v any) error {
+	if !c.isReady {
+		return errors.New("client is not ready")
+	}
 	err := c.encoder.Encode(&messages.Envelope{
 		Version: 0,
-		Type:    name,
-		Raw:     plugkit.MustRaw(v),
+		Type:    string(name),
+		Raw:     helpers.MustRaw(v),
 	})
 	if err != nil {
 		fmt.Println("Error during encoding of the envelope")
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 // Main loop for the plug
@@ -84,7 +99,7 @@ func (c *Client) loop() {
 		var msg messages.Envelope
 		if err := c.decoder.Decode(&msg); err != nil {
 			if err == io.EOF {
-				c.Wg.Done()
+				c.wg.Done()
 				fmt.Println("Plugin finished prematurely - broken pipe")
 				break
 			}
@@ -96,7 +111,7 @@ func (c *Client) loop() {
 			//FIXME: Handling of errors
 			fmt.Println("Plugin finished its job")
 			fmt.Println("Cleaning up")
-			c.Wg.Done()
+			c.wg.Done()
 			break
 		}
 		if msg.Type == string(codes.Unsupported) {
@@ -109,43 +124,79 @@ func (c *Client) loop() {
 			}
 			handler(msg.Raw)
 		} else {
-			// FIXME: Client Library does not support unsupported messages
-			c.Respond(string(codes.Unsupported), &messages.MessageUnsupported{})
+			err := c.Respond(codes.Unsupported, &messages.MessageUnsupported{})
+			if err != nil {
+				// FIXME: If response fails it probably means that plugin died unexpectedly.
+				panic(err)
+			}
 		}
 	}
 }
 
 // Kill demands graceful shutdown of a plug.
-func (c *Client) Kill() {
-	c.RunCommand("stopcommand", &messages.StopCommand{
+func (c *Client) Kill() error {
+	err := c.RunCommand(codes.ExitMessage, &messages.StopCommand{
 		Reason: codes.OperationCancelledByClient,
 	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // HandleMessageType adds handler for incoming messages from the plug to the host.
-func (h *Client) HandleMessageType(name string, handler func([]byte)) {
-	h.Handlers[name] = handler
+func (c *Client) HandleMessageType(name string, handler func([]byte)) {
+	c.Handlers[name] = handler
 }
 
-// Respond is a basic function for sending message from host to a plug.
-func (h *Client) Respond(t string, v any) {
-	// FIXME: Unhandled error here
-	// FIXME: Test
-	h.encoder.Encode(messages.Envelope{
+// RespondRaw is a basic function for sending any message from host to a plug.
+func (c *Client) RespondRaw(t string, v any) error {
+	// FIXME: Lacking test?
+	err := c.encoder.Encode(messages.Envelope{
 		Version: 1,
 		Type:    t,
-		Raw:     plugkit.MustRaw(v),
+		Raw:     helpers.MustRaw(v),
 	})
 
-	// FIXME: No support for errors
+	return err
+
 }
 
-func (h *Client) Init() {
+// Respond is a function for sending message with a particular type from host to a plug.
+// Its aim is to help the developer creating message codes. I.e.:
+// ```
+// const (
+//
+//	Ping code.MessageCode = "Ping"
+//	Pong = "Pong"
+//
+// )
+//
+// client.Respond(Ping, &PingMsg{})
+// ```
+func (c *Client) Respond(messageCode codes.MessageCode, v any) error {
+	// FIXME: Lacking test?
+	err := c.encoder.Encode(messages.Envelope{
+		Version: 1,
+		Type:    string(messageCode),
+		Raw:     helpers.MustRaw(v),
+	})
+
+	return err
+
+}
+
+func (c *Client) Init() {
 	panic("implement me")
 	//FIXME: Implement me
 }
 
-// SetCommand is
+// SetCommand sets plug executable name
 func (c *Client) SetCommand(command string) {
 	c.command = command
+}
+
+// Wait blocks until client-plug connection terminates
+func (c *Client) Wait() {
+	c.wg.Wait()
 }
