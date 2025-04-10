@@ -82,34 +82,22 @@ func (c *Client) RunCommand(name codes.MessageCode, v any) error {
 		fmt.Println("Error during encoding of the envelope")
 		return err
 	}
-	c.loop()
-	return nil
-}
-
-// Main loop for the plug
-func (c *Client) loop() {
-	fmt.Println("Starting loop")
-	// FIXME: Add handshake
-	// FIXME: Add exit and possibly other signals
 	var msg messages.Envelope
 	if err := c.decoder.Decode(&msg); err != nil {
 		if err == io.EOF {
+			// FIXME: Log Error?
 			fmt.Println("Plugin finished prematurely - broken pipe")
-
 		}
 		fmt.Fprintln(os.Stderr, "decode error:", err)
-		os.Exit(1)
+		return err
 	}
 	if msg.Type == string(codes.FinishMessage) {
-		//FIXME: Something is missing here.
-		//FIXME: Handling of errors
 		fmt.Println("Plugin finished its job")
 		fmt.Println("Cleaning up")
-
+		return nil
 	}
 	if msg.Type == string(codes.Unsupported) {
-		panic("unsupported message")
-		// FIXME: There is probably better way to respond to that situation...
+		return errors.New("unsupported message type")
 	}
 	if handler, ok := c.Handlers[msg.Type]; ok {
 		if msg.Raw == nil {
@@ -119,11 +107,12 @@ func (c *Client) loop() {
 	} else {
 		err := c.Respond(codes.Unsupported, &messages.MessageUnsupported{})
 		if err != nil {
-			// FIXME: If response fails it probably means that plugin died unexpectedly.
-			panic(err)
+			// FIXME: Maybe too vague?
+			return errors.New("plug crashed " + err.Error())
 		}
+		return errors.New("unsupported response message type")
 	}
-
+	return nil
 }
 
 // Kill demands graceful shutdown of a plug.
@@ -176,12 +165,6 @@ func (c *Client) Respond(messageCode codes.MessageCode, v any) error {
 	})
 
 	return err
-
-}
-
-func (c *Client) Init() {
-	panic("implement me")
-	//FIXME: Implement me
 }
 
 // SetCommand sets plug executable name
