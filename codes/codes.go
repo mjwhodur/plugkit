@@ -6,7 +6,7 @@ const (
 	ExitMessage    MessageCode = "PLUGKIT_Exit"
 	Unsupported    MessageCode = "PLUGKIT_Unsupported"
 	FinishMessage  MessageCode = "PLUGKIT_Finish"
-	PluginResponse MessageCode = "PLUGKIT_Response"
+	PluginResponse MessageCode = "PLUGKIT_Response" // FIXME: PluginResponse seems unused.
 )
 
 type PluginExitReason int
