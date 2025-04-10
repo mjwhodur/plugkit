@@ -9,6 +9,11 @@ const (
 	PluginResponse MessageCode = "PLUGKIT_Response" // FIXME: PluginResponse seems unused.
 )
 
+// PluginExitReason provides basic operation codes which can be cast to a string
+// using String() function and therefore used in errors. Codes can be extended,
+// but the String() function will return `UnknownExternalStatusCode` if it receives
+// a code that it does not recognize.It is recommended not to overshadow standard
+// plugin exit reasons.
 type PluginExitReason int
 
 const (
@@ -21,7 +26,8 @@ const (
 	OperationSucceededWithWarnings
 	PluginToHostCommunicationError
 	HostToPluginCommunicationError
-
+	PlugNotStarted
+	PlugCrashed
 	DataFormatError           = 65
 	ErrNoInput                = 66
 	ErrServiceUnavailable     = 69

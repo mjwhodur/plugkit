@@ -1,6 +1,6 @@
-default: test
+default: pregit
 
-test: tm build 0-plugin-test clean
+test: tm build 0-plugin-test
 
 tm:
 	@echo "Beginning standard testing procedure"
@@ -41,4 +41,4 @@ update-golangci:
 format:
 	@$(GOLANGCI_LINT) run --fix
 
-pregit: format test
+pregit: format test clean

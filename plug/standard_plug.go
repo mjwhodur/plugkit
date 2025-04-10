@@ -10,7 +10,7 @@ import (
 	"github.com/mjwhodur/plugkit/messages"
 )
 
-// Plug is a most standard type of plug.
+// Plug is a most standard type of plug. It supports one-off comand.
 type Plug struct {
 	Handlers map[string]func([]byte) (result *messages.Result, exitReason codes.PluginExitReason, e error)
 	decoder  *cbor.Decoder

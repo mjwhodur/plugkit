@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mjwhodur/plugkit/client"
+	"github.com/mjwhodur/plugkit/codes"
 	"github.com/mjwhodur/plugkit/examples/0-plugin-test/shared"
 )
 
@@ -18,10 +18,11 @@ func main() {
 	if err != nil {
 		return
 	}
-	e := c.RunCommand("ping", &shared.Ping{})
-	if e != nil {
-		os.Exit(1)
-	} //nolint:errcheck
+	reason, e := c.RunCommand("ping", &shared.Ping{})
+	if reason != codes.OperationSuccess {
+		panic(e)
+	}
+
 }
 
 func Pong(b []byte) {

@@ -69,9 +69,9 @@ func NewClient(name string) *Client {
 }
 
 // RunCommand sends arbitrary message to a plug. Plug must understand the message.
-func (c *Client) RunCommand(name codes.MessageCode, v any) error {
+func (c *Client) RunCommand(name codes.MessageCode, v any) (codes.PluginExitReason, error) {
 	if !c.isReady {
-		return errors.New("client is not ready")
+		return codes.PlugNotStarted, errors.New("client is not ready")
 	}
 	err := c.encoder.Encode(&messages.Envelope{
 		Version: 0,
@@ -80,7 +80,7 @@ func (c *Client) RunCommand(name codes.MessageCode, v any) error {
 	})
 	if err != nil {
 		fmt.Println("Error during encoding of the envelope")
-		return err
+		return codes.PlugCrashed, err
 	}
 	var msg messages.Envelope
 	if err := c.decoder.Decode(&msg); err != nil {
@@ -89,15 +89,20 @@ func (c *Client) RunCommand(name codes.MessageCode, v any) error {
 			fmt.Println("Plugin finished prematurely - broken pipe")
 		}
 		fmt.Fprintln(os.Stderr, "decode error:", err)
-		return err
+		return codes.PlugCrashed, err
 	}
 	if msg.Type == string(codes.FinishMessage) {
 		fmt.Println("Plugin finished its job")
 		fmt.Println("Cleaning up")
-		return nil
+		var fin *messages.PluginFinish
+		err := cbor.Unmarshal(msg.Raw, &fin)
+		if err != nil {
+			return codes.PluginToHostCommunicationError, err
+		}
+		return fin.Reason, errors.New(fin.Message)
 	}
 	if msg.Type == string(codes.Unsupported) {
-		return errors.New("unsupported message type")
+		return codes.CommandInvokedCannotExecute, errors.New("unsupported message type")
 	}
 	if handler, ok := c.Handlers[msg.Type]; ok {
 		if msg.Raw == nil {
@@ -105,25 +110,26 @@ func (c *Client) RunCommand(name codes.MessageCode, v any) error {
 		}
 		handler(msg.Raw)
 	} else {
-		err := c.Respond(codes.Unsupported, &messages.MessageUnsupported{})
+		err := c.respond(codes.Unsupported, &messages.MessageUnsupported{})
 		if err != nil {
 			// FIXME: Maybe too vague?
-			return errors.New("plug crashed " + err.Error())
+			return codes.PlugCrashed, errors.New("plug crashed " + err.Error())
 		}
-		return errors.New("unsupported response message type")
+		return codes.OperationError, errors.New("unsupported response message type")
 	}
-	return nil
+	return codes.OperationSuccess, nil
 }
 
 // Kill demands graceful shutdown of a plug.
 func (c *Client) Kill() error {
-	err := c.RunCommand(codes.ExitMessage, &messages.StopCommand{
+	reason, _ := c.RunCommand(codes.ExitMessage, &messages.StopCommand{
 		Reason: codes.OperationCancelledByClient,
 	})
-	if err != nil {
-		return err
+	if reason != codes.OperationSuccess {
+		return errors.New("plug crashed " + reason.String())
 	}
 	return nil
+	// FIXME: Probably not required?
 }
 
 // HandleMessageType adds handler for incoming messages from the plug to the host.
@@ -144,7 +150,7 @@ func (c *Client) RespondRaw(t string, v any) error {
 
 }
 
-// Respond is a function for sending message with a particular type from host to a plug.
+// respond is a function for sending message with a particular type from host to a plug.
 // Its aim is to help the developer creating message codes. I.e.:
 // ```
 // const (
@@ -156,7 +162,7 @@ func (c *Client) RespondRaw(t string, v any) error {
 //
 // client.Respond(Ping, &PingMsg{})
 // ```
-func (c *Client) Respond(messageCode codes.MessageCode, v any) error {
+func (c *Client) respond(messageCode codes.MessageCode, v any) error {
 	// FIXME: Lacking test?
 	err := c.encoder.Encode(messages.Envelope{
 		Version: 1,
