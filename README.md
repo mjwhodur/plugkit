@@ -1,4 +1,7 @@
 # PlugKit
+![GitHub License](https://img.shields.io/github/license/mjwhodur/plugkit)
+![GitHub Tag](https://img.shields.io/github/v/tag/mjwhodur/plugkit)
+![GitHub last commit](https://img.shields.io/github/last-commit/mjwhodur/plugkit)
 
 **PlugKit** to stupidly simple, stream-capable plugin runtime for Go.  
 No gRPC. No protobuf. No codegen.  
