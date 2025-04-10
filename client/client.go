@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sync"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mjwhodur/plugkit/codes"
@@ -20,7 +19,6 @@ type Client struct {
 	decoder  *cbor.Decoder
 	command  string
 	Handlers map[string]func([]byte)
-	wg       *sync.WaitGroup
 	isReady  bool
 }
 
@@ -56,8 +54,6 @@ func (c *Client) StartLocal() error {
 		return errors.New("failed to create encoder")
 	}
 
-	c.wg.Add(1)
-	go c.loop()
 	return nil
 }
 
@@ -68,7 +64,6 @@ func NewClient(name string) *Client {
 	return &Client{
 		command:  name,
 		Handlers: make(map[string]func([]byte)),
-		wg:       &sync.WaitGroup{},
 		isReady:  isReady,
 	}
 }
@@ -87,6 +82,7 @@ func (c *Client) RunCommand(name codes.MessageCode, v any) error {
 		fmt.Println("Error during encoding of the envelope")
 		return err
 	}
+	c.loop()
 	return nil
 }
 
@@ -95,42 +91,39 @@ func (c *Client) loop() {
 	fmt.Println("Starting loop")
 	// FIXME: Add handshake
 	// FIXME: Add exit and possibly other signals
-	for {
-		var msg messages.Envelope
-		if err := c.decoder.Decode(&msg); err != nil {
-			if err == io.EOF {
-				c.wg.Done()
-				fmt.Println("Plugin finished prematurely - broken pipe")
-				break
-			}
-			fmt.Fprintln(os.Stderr, "decode error:", err)
-			os.Exit(1)
+	var msg messages.Envelope
+	if err := c.decoder.Decode(&msg); err != nil {
+		if err == io.EOF {
+			fmt.Println("Plugin finished prematurely - broken pipe")
+
 		}
-		if msg.Type == string(codes.FinishMessage) {
-			//FIXME: Something is missing here.
-			//FIXME: Handling of errors
-			fmt.Println("Plugin finished its job")
-			fmt.Println("Cleaning up")
-			c.wg.Done()
-			break
+		fmt.Fprintln(os.Stderr, "decode error:", err)
+		os.Exit(1)
+	}
+	if msg.Type == string(codes.FinishMessage) {
+		//FIXME: Something is missing here.
+		//FIXME: Handling of errors
+		fmt.Println("Plugin finished its job")
+		fmt.Println("Cleaning up")
+
+	}
+	if msg.Type == string(codes.Unsupported) {
+		panic("unsupported message")
+		// FIXME: There is probably better way to respond to that situation...
+	}
+	if handler, ok := c.Handlers[msg.Type]; ok {
+		if msg.Raw == nil {
+			fmt.Println("Received message with no raw payload")
 		}
-		if msg.Type == string(codes.Unsupported) {
-			panic("unsupported message")
-			// FIXME: There is probably better way to respond to that situation...
-		}
-		if handler, ok := c.Handlers[msg.Type]; ok {
-			if msg.Raw == nil {
-				fmt.Println("Received message with no raw payload")
-			}
-			handler(msg.Raw)
-		} else {
-			err := c.Respond(codes.Unsupported, &messages.MessageUnsupported{})
-			if err != nil {
-				// FIXME: If response fails it probably means that plugin died unexpectedly.
-				panic(err)
-			}
+		handler(msg.Raw)
+	} else {
+		err := c.Respond(codes.Unsupported, &messages.MessageUnsupported{})
+		if err != nil {
+			// FIXME: If response fails it probably means that plugin died unexpectedly.
+			panic(err)
 		}
 	}
+
 }
 
 // Kill demands graceful shutdown of a plug.
@@ -194,9 +187,4 @@ func (c *Client) Init() {
 // SetCommand sets plug executable name
 func (c *Client) SetCommand(command string) {
 	c.command = command
-}
-
-// Wait blocks until client-plug connection terminates
-func (c *Client) Wait() {
-	c.wg.Wait()
 }

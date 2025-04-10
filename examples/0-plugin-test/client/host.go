@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mjwhodur/plugkit/client"
@@ -17,8 +18,10 @@ func main() {
 	if err != nil {
 		return
 	}
-	c.RunCommand("ping", &shared.Ping{}) //nolint:errcheck
-	c.Wait()
+	e := c.RunCommand("ping", &shared.Ping{})
+	if e != nil {
+		os.Exit(1)
+	} //nolint:errcheck
 }
 
 func Pong(b []byte) {
