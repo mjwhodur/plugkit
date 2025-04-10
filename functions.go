@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Michał Hodur
+// SPDX-License-Identifier: MIT
+
 package plugkit
 
 import (
@@ -18,7 +21,3 @@ func CreateAndRunPlug(handlers *[]options.CommandHandler) error {
 	}
 	return p.Main()
 }
-
-// func NewBiDiPlug()   {}
-func NewClient()     {}
-func NewBiDiClient() {}
