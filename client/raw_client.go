@@ -13,7 +13,7 @@ import (
 )
 
 type RawClientImpl interface {
-	Handle(payload []byte)
+	Handle(msgType string, payload []byte)
 }
 type RawClient struct {
 	encoder *cbor.Encoder
@@ -111,7 +111,7 @@ func (c *RawClient) RunCommand(name codes.MessageCode, v any) (codes.PluginExitR
 		if e := cbor.Unmarshal(msg.Raw, &result); e != nil {
 			panic(e)
 		}
-		c.Impl.Handle(msg.Raw)
+		c.Impl.Handle(msg.Type, msg.Raw)
 	}
 
 	e := c.respond(codes.Unsupported, &messages.MessageUnsupported{})
