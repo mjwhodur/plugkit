@@ -13,12 +13,21 @@ All notable changes to this project will be documented in this file.
 
 - Fixes implementation handler. Supports passing message type to the handler
 
+### 📚 Documentation
+
+- Demonstrates example-0 scenario.
+
+### 🎨 Styling
+
+- Git Cliff configuration !skip-cliff
+
 ### ⚙️ Miscellaneous Tasks
 
 - Adds changelog
+- Adds changelog
 
 ## [0.1.0] - 2025-04-11
-
+__
 ### 🚀 Features
 
 - Add SPDX and other legal things
