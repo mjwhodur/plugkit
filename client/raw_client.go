@@ -3,13 +3,14 @@ package client
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mjwhodur/plugkit/codes"
 	"github.com/mjwhodur/plugkit/helpers"
 	"github.com/mjwhodur/plugkit/messages"
-	"io"
-	"os"
-	"os/exec"
 )
 
 type RawClientImpl interface {
