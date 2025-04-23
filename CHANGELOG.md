@@ -2,11 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.1] - 2025-04-11
+## [0.2.0] - 2025-04-23
 
-### ⚙️ Miscellaneous Tasks
+### 🚀 Features
 
-- Adds changelog
+- Working RawStreamPlug and RawStreamClient
+
+### 📚 Documentation
+
+- Enhancing documentation of the clients
+
+### 🧪 Testing
+
+- Adds basic integration tests for RawPlug, RawClient as well as basic integration test for SmartPlug and RawClient inter-connection.
 
 ## [0.1.0] - 2025-04-11
 

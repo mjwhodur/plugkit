@@ -10,7 +10,7 @@ import (
 
 	"github.com/mjwhodur/plugkit/client"
 	"github.com/mjwhodur/plugkit/codes"
-	"github.com/mjwhodur/plugkit/examples/0-plugin-test/shared"
+	"github.com/mjwhodur/plugkit/examples/0-smartplug-test-basic/shared"
 )
 
 func main() {

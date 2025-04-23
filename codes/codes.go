@@ -33,7 +33,10 @@ const (
 
 	// PluginResponse was intended to indicate a direct response from the plugin
 	// to a request, but is currently unused. FIXME: Consider removing or implementing it.
-	PluginResponse MessageCode = "PLUGKIT_Response"
+	PluginResponse   MessageCode = "PLUGKIT_Response"
+	PayloadMalformed MessageCode = "PLUGKIT_PayloadMalformed"
+	PluginCrashed    MessageCode = "PLUGKIT_PluginCrashed"
+	HandlingError    MessageCode = "PLUGKIT_HandlingError"
 )
 
 // PluginExitReason defines standard exit codes used by plugins in the PlugKit system.

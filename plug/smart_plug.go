@@ -23,7 +23,7 @@ import (
 )
 
 // SmartPlug is a most standard type of plug. It supports one-off comand.
-// SmartPlug is the core runtime structure for a PlugKit plugin.
+// SmartPlug is the one of the runtime structures for a PlugKit plugin.
 //
 // It supports registering handlers for specific message types and
 // handles a single Envelope message per execution.
