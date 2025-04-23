@@ -1,6 +1,7 @@
 package plug
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/mjwhodur/plugkit/helpers"
@@ -13,9 +14,9 @@ import (
 // RawPlugImpl is the interface that every raw plug implementation must satisfy.
 //
 // Handle receives the raw CBOR payload extracted from the envelope and returns:
-// - a message code indicating the result (e.g., "ok", "unsupported", etc.),
+// - a message code indicating the result (e.g., "ok", "unsupported", custom-defined, etc.),
 // - a CBOR-encoded response payload to be sent back to the host,
-// - or an error, which will cause the RawPlug to send a fatal failure response to the host.
+// - or an error, which will cause the RawPlug to send a operation failure response to the host.
 //
 // If an error is returned from Handle, the plug is considered to have failed the request.
 // In all other cases, the message is treated as successfully handled,
@@ -25,7 +26,7 @@ import (
 // Mount is called once at startup and provides the plugin with access to its host context,
 // which can be used to configure or initialize internal state.
 type RawPlugImpl interface {
-	Handle(kind string, payload *cbor.RawMessage) (messageCode string, response cbor.RawMessage, err error)
+	Handle(kind string, payload cbor.RawMessage) (messageCode string, response cbor.RawMessage, err error)
 	Mount(c *RawPlug)
 }
 
@@ -66,27 +67,53 @@ func (p *RawPlug) Main() error {
 
 	}
 	// Pass the raw payload to the implementation.
-	msgCode, res, err := p.PlugImpl.Handle(msg.Type, &msg.Raw)
+	msgCode, res, err := p.PlugImpl.Handle(msg.Type, msg.Raw)
 	if err != nil {
 		// Return a handling error with the error as payload.
-		p.Respond(string(codes.HandlingError), helpers.MustRaw(err))
+		p.respondError(string(codes.HandlingError), helpers.MustRaw(err))
 		return err
 	}
 
 	// Send the response with the provided message code and payload.
-	p.Respond(msgCode, res)
+	p.respond(msgCode, res)
 	return nil
 }
 
-// Respond sends a single Envelope with the given message code and CBOR payload to stdout.
-func (p *RawPlug) Respond(messageCode string, payload cbor.RawMessage) {
+// respond sends an Envelope with the success message code and CBOR payload to stdout.
+func (p *RawPlug) respond(messageCode string, payload cbor.RawMessage) {
+	// FIXME: message code name needs to be fixed
+	res := &messages.Result{ExitCode: codes.OperationSuccess, Type: messageCode, Value: payload}
+	// data, e := cbor.Marshal(res)
+	// if e != nil {
+	//	panic(e)
+	//}
 	err := p.encoder.Encode(messages.Envelope{
 		Version: 1,
-		Type:    messageCode,
-		Raw:     payload,
+		Type:    string(codes.PluginResponse),
+		Raw:     helpers.MustRaw(res),
 	})
 	if err != nil {
 		// If we can't write the response, panic — plugin cannot recover.
-		panic(err)
+		fmt.Println(err)
 	}
 }
+
+// respondError sends an Envelope with the failure message code and CBOR payload to stdout.
+func (p *RawPlug) respondError(messageCode string, payload cbor.RawMessage) {
+	res := &messages.Result{ExitCode: codes.OperationError, Type: messageCode, Value: payload}
+	// data, e := cbor.Marshal(res)
+	// if e != nil {
+	//	panic(e)
+	//}
+	err := p.encoder.Encode(messages.Envelope{
+		Version: 1,
+		Type:    string(codes.PluginResponse),
+		Raw:     helpers.MustRaw(res),
+	})
+	if err != nil {
+		// If we can't write the response, panic — plugin cannot recover.
+		fmt.Println(err)
+	}
+}
+
+// FIXME: Hide private functions?

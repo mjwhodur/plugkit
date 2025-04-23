@@ -45,9 +45,10 @@ type RawStreamClient struct {
 // NewRawStreamClient constructs a new RawStreamClient with the given handler implementation.
 //
 // The plugin process is not started automatically — use Start() and then Run() to begin communication.
-func NewRawStreamClient(impl RawStreamClientImpl) *RawStreamClient {
+func NewRawStreamClient(impl RawStreamClientImpl, command string) *RawStreamClient {
 	return &RawStreamClient{
-		Impl: impl,
+		Impl:    impl,
+		command: command,
 	}
 }
 
@@ -120,8 +121,8 @@ loop:
 		select {
 		case <-c.ctx.Done():
 
-			c.wg.Add(1)
-			go c.Impl.CloseSignal()
+			// FIXME: It may crash. It should be blocking (somehow - or expecting a value?)
+			c.Impl.CloseSignal()
 
 			break loop
 
@@ -156,7 +157,8 @@ func (c *RawStreamClient) ResponseWrapper(msg messages.Envelope) {
 	if err != nil {
 		// Return a handling error with the error as payload.
 		c.Respond(string(codes.HandlingError), helpers.MustRaw(err))
-
+		c.wg.Done()
+		return
 	}
 
 	// Send the response with the provided message code and payload.

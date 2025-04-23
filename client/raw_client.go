@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 
 	"github.com/fxamacker/cbor/v2"
@@ -22,7 +21,7 @@ import (
 // RawClientImpl defines the interface that must be implemented by users of RawClient.
 // It is responsible for handling incoming messages manually.
 type RawClientImpl interface {
-	Handle(msgType string, payload []byte)
+	Handle(responseType string, payload []byte)
 }
 
 // RawClient provides a minimalistic PlugKit host implementation.
@@ -101,46 +100,44 @@ func (c *RawClient) RunCommand(name codes.MessageCode, v any) (codes.PluginExitR
 		Raw:     helpers.MustRaw(v),
 	})
 	if err != nil {
-		fmt.Println("Error during encoding of the envelope")
 		return codes.PlugCrashed, nil, err
 	}
-	var msg messages.Envelope
-	if err := c.decoder.Decode(&msg); err != nil {
+	var envelope messages.Envelope
+	if err := c.decoder.Decode(&envelope); err != nil {
 		if err == io.EOF {
-			// FIXME: Log Error?
-			fmt.Println("Plugin finished prematurely - broken pipe")
 			return codes.PlugCrashed, nil, err
 		}
-		fmt.Fprintln(os.Stderr, "decode error:", err)
 		return codes.PluginToHostCommunicationError, nil, err
 	}
-	if msg.Type == string(codes.FinishMessage) {
-		fmt.Println("Plugin finished its job")
-		fmt.Println("Cleaning up")
+	fmt.Println(envelope.Type)
+	if envelope.Type == string(codes.FinishMessage) {
 		var fin *messages.PluginFinish
-		err := cbor.Unmarshal(msg.Raw, &fin)
+		err := cbor.Unmarshal(envelope.Raw, &fin)
 		if err != nil {
 			return codes.PluginToHostCommunicationError, nil, err
 		}
 		return fin.Reason, nil, errors.New(fin.Message)
 	}
-	if msg.Type == string(codes.Unsupported) {
+	if envelope.Type == string(codes.Unsupported) {
 		return codes.CommandInvokedCannotExecute, nil, errors.New("unsupported message type")
 	}
-	if msg.Type == string(codes.PluginResponse) {
+	if envelope.Type == string(codes.PluginResponse) {
 		var result messages.Result
-		if e := cbor.Unmarshal(msg.Raw, &result); e != nil {
+
+		if e := cbor.Unmarshal(envelope.Raw, &result); e != nil {
 			panic(e)
 		}
-		c.Impl.Handle(msg.Type, msg.Raw)
+		val, _ := cbor.Marshal(result.Value)
+		c.Impl.Handle(result.Type, val)
+		return codes.OperationSuccess, nil, nil
 	}
 
 	e := c.respond(codes.Unsupported, &messages.MessageUnsupported{})
 	if e != nil {
 		// FIXME: Maybe too vague?
-		return codes.PlugCrashed, nil, errors.New("plug crashed " + err.Error())
+		return codes.PlugCrashed, nil, e
 	}
-	return codes.OperationError, nil, errors.New("unsupported response message type")
+	return codes.PluginToHostCommunicationError, nil, errors.New("unsupported response message type")
 
 }
 
@@ -162,4 +159,15 @@ func (c *RawClient) respond(messageCode codes.MessageCode, v any) error {
 // This must be set before calling StartLocal().
 func (c *RawClient) SetCommand(command string) {
 	c.command = command
+}
+
+// NewRawClient returns plugin with impl implementation
+func NewRawClient(name string, impl RawClientImpl) *RawClient {
+	isReady := name != ""
+
+	return &RawClient{
+		isReady: isReady,
+		command: name,
+		Impl:    impl,
+	}
 }
