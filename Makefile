@@ -1,6 +1,6 @@
 default: pregit
 
-test: tm build 0-plugin-test 1-plugin-test 2-plugin-test
+test: tm build 0-plugin-test 1-plugin-test 2-plugin-test 3-plugin-test
 
 tm:
 	@echo "Beginning standard testing procedure"
@@ -34,6 +34,14 @@ build:
 	@echo "==== 2-plugin-test procedure ===="
 	@go build -o host ./examples/2-rawclient-rawplug-test-basic/client
 	@go build -o plugin ./examples/2-rawclient-rawplug-test-basic/plug
+	./host
+	@echo
+	@echo "No error reported."
+
+3-plugin-test:
+	@echo "==== 2-plugin-test procedure ===="
+	@go build -o host ./examples/3-rawstream-basic/client
+	@go build -o plugin ./examples/3-rawstream-basic/plug
 	./host
 	@echo
 	@echo "No error reported."

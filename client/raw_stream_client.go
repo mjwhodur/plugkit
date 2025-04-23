@@ -5,12 +5,13 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/mjwhodur/plugkit/codes"
-	"github.com/mjwhodur/plugkit/helpers"
 	"github.com/mjwhodur/plugkit/messages"
 )
 
@@ -21,7 +22,7 @@ import (
 // - Mount is called before the communication loop starts.
 // - CloseSignal is triggered when the stream is closing.
 type RawStreamClientImpl interface {
-	Handle(kind string, payload *cbor.RawMessage) (messageCode string, response cbor.RawMessage, err error)
+	Handle(kind string, payload *cbor.RawMessage)
 	Mount(c *RawStreamClient)
 	CloseSignal()
 }
@@ -40,6 +41,9 @@ type RawStreamClient struct {
 	wg      *sync.WaitGroup
 	ctx     context.Context
 	cancel  context.CancelFunc
+	msgs    chan messages.Envelope
+	plug    *exec.Cmd
+	sig     chan struct{}
 }
 
 // NewRawStreamClient constructs a new RawStreamClient with the given handler implementation.
@@ -60,8 +64,10 @@ func (c *RawStreamClient) Start() error {
 	if c.command == "" {
 		return errors.New("command executable is required")
 	}
-
+	c.msgs = make(chan messages.Envelope, 1)
+	c.sig = make(chan struct{}, 1)
 	cmd := exec.Command(c.command) // #nosec G204
+	c.plug = cmd
 	stdin, err := cmd.StdinPipe()
 
 	if err != nil {
@@ -108,68 +114,73 @@ func (c *RawStreamClient) Run() {
 //
 // It cancels the internal context and allows the loop to exit gracefully.
 func (c *RawStreamClient) Stop() {
-	c.cancel()
+	// FIXME: Drut! But why?
+	if c.cancel != nil {
+		c.cancel()
+	} else {
+		c.sig <- struct{}{}
+	}
 }
 
 // loop is the internal message receive loop.
 //
 // It continuously decodes CBOR messages from the plugin and dispatches them
-// via the ResponseWrapper for asynchronous handling.
+// via the Wrapper for asynchronous handling.
 func (c *RawStreamClient) loop() {
 loop:
 	for {
+		msgCh := make(chan messages.Envelope)
+		errCh := make(chan error)
+
+		go func() {
+			var msg messages.Envelope
+			err := c.decoder.Decode(&msg)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			msgCh <- msg
+		}()
+
 		select {
 		case <-c.ctx.Done():
-
-			// FIXME: It may crash. It should be blocking (somehow - or expecting a value?)
 			c.Impl.CloseSignal()
-
+			c.wg.Done()
+			break loop
+		case <-c.sig:
+			// FIXME: HACK!
+			c.Impl.CloseSignal()
+			c.wg.Done()
+			break loop
+		case <-errCh:
+			c.wg.Done()
 			break loop
 
-		default:
-
-			var msg messages.Envelope
-			if err := c.decoder.Decode(&msg); err != nil {
-				err := c.encoder.Encode(messages.Envelope{
-					Version: 1,
-					Type:    string(codes.PayloadMalformed),
-					Raw:     helpers.MustRaw(&messages.MessageUnsupported{}),
-				})
-				if err != nil {
-					panic(err)
-				}
-				continue
-			}
+		case msg := <-msgCh:
 
 			c.wg.Add(1)
-			go c.ResponseWrapper(msg)
-
+			go c.Wrapper(msg)
 		}
+	}
+	err := c.plug.Process.Signal(os.Signal(syscall.SIGINT))
+	if err != nil {
+		fmt.Println(err)
 	}
 }
 
-// ResponseWrapper wraps a single message and processes it via the implementation's Handle method.
+// Wrapper wraps a single message and processes it via the implementation's Handle method.
 //
 // It constructs a response and sends it back to the plugin.
 // This function is run as a goroutine for each message.
-func (c *RawStreamClient) ResponseWrapper(msg messages.Envelope) {
-	msgCode, res, err := c.Impl.Handle(msg.Type, &msg.Raw)
-	if err != nil {
-		// Return a handling error with the error as payload.
-		c.Respond(string(codes.HandlingError), helpers.MustRaw(err))
-		c.wg.Done()
-		return
-	}
-
-	// Send the response with the provided message code and payload.
-	c.Respond(msgCode, res)
+func (c *RawStreamClient) Wrapper(msg messages.Envelope) {
+	c.Impl.Handle(msg.Type, &msg.Raw)
 	c.wg.Done()
 }
 
-// Respond sends a response message back to the plugin.
+// Send sends a response message back to the plugin.
 //
 // The message type and CBOR payload must be specified explicitly.
-func (c *RawStreamClient) Respond(messageCode string, payload cbor.RawMessage) {
+func (c *RawStreamClient) Send(messageCode string, payload cbor.RawMessage) {
 	err := c.encoder.Encode(messages.Envelope{
 		Version: 1,
 		Type:    messageCode,
@@ -180,3 +191,13 @@ func (c *RawStreamClient) Respond(messageCode string, payload cbor.RawMessage) {
 		panic(err)
 	}
 }
+
+// func (c *RawStreamClient) decode() {
+//	var msg messages.Envelope
+//	err := c.decoder.Decode(&msg)
+//	if err != nil {
+//		// errCh <- err
+//		return
+//	}
+//	c.msgs <- msg
+//}

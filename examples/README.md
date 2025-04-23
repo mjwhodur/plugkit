@@ -1,7 +1,8 @@
 # Examples
 
 This folder has working examples that are compiled during testing of the library
-These examples are integration tests of the PlugKit Framework.
+These examples are also the integration tests of the PlugKit Framework.
+
 ## Core integration tests 
 
 ### 0-plugin-test
@@ -20,7 +21,7 @@ It is a basic test for a RawPlug and RawClient.
 Checks whether marshalling is correct for Correct messages.
 It is a very basic architecture - when your plugins are predictable and correctly written.
 
-# ✅ PlugKit – Integration Test Checklist
+## ✅ PlugKit – Integration Test Checklist
 
 Each combination of plugin and client implementation should pass the following scenarios to be considered conformant with the PlugKit protocol.
 

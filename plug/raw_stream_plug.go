@@ -14,7 +14,7 @@ import (
 )
 
 type RawStreamPlugImpl interface {
-	Handle(kind string, payload *cbor.RawMessage) (messageCode string, response cbor.RawMessage, err error)
+	Handle(kind string, payload cbor.RawMessage)
 	Mount(c *RawStreamPlug)
 	CloseSignal()
 }
@@ -24,7 +24,10 @@ type RawStreamPlug struct {
 	decoder  *cbor.Decoder
 	encoder  *cbor.Encoder
 	wg       *sync.WaitGroup
-	ctx      context.Context
+	ossig    context.Context
+	implsig  context.Context
+	cancel   context.CancelFunc
+	osstop   context.CancelFunc
 }
 
 func NewRawStreamPlug(impl RawStreamPlugImpl) *RawStreamPlug {
@@ -38,16 +41,15 @@ func (p *RawStreamPlug) Main() {
 	p.decoder = cbor.NewDecoder(os.Stdin)
 	p.encoder = cbor.NewEncoder(os.Stdout)
 	p.wg = &sync.WaitGroup{}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	p.ctx = ctx
+	p.ossig, p.osstop = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	p.implsig, p.cancel = context.WithCancel(context.Background())
 
 	p.wg.Add(1)
 	go p.Loop()
 	p.wg.Wait()
 }
 
-func (p *RawStreamPlug) Respond(messageCode string, payload cbor.RawMessage) {
+func (p *RawStreamPlug) Send(messageCode string, payload cbor.RawMessage) {
 	err := p.encoder.Encode(messages.Envelope{
 		Version: 1,
 		Type:    messageCode,
@@ -64,12 +66,18 @@ func (p *RawStreamPlug) Loop() {
 loop:
 	for {
 		select {
-		case <-p.ctx.Done():
+		case <-p.ossig.Done():
 
 			p.wg.Add(1)
-			go p.PlugImpl.CloseSignal()
+			go func() {
+				p.PlugImpl.CloseSignal()
+				p.osstop()
+				p.wg.Done()
+			}()
 			break loop
-
+		case <-p.implsig.Done():
+			p.wg.Done()
+			break loop
 		default:
 			var msg messages.Envelope
 			if err := p.decoder.Decode(&msg); err != nil {
@@ -93,15 +101,11 @@ loop:
 }
 
 func (p *RawStreamPlug) responseWrapper(msg messages.Envelope) {
-	msgCode, res, err := p.PlugImpl.Handle(msg.Type, &msg.Raw)
-	if err != nil {
-		// Return a handling error with the error as payload.
-		p.Respond(string(codes.HandlingError), helpers.MustRaw(err))
-
-	}
-
-	// Send the response with the provided message code and payload.
-	p.Respond(msgCode, res)
+	p.PlugImpl.Handle(msg.Type, msg.Raw)
 	p.wg.Done()
 
+}
+
+func (p *RawStreamPlug) Shutdown() {
+	p.cancel()
 }
