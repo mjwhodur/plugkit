@@ -1,3 +1,9 @@
+// Copyright (c) 2025 Michał Hodur
+// SPDX-License-Identifier: MIT
+
+// Package client provides a low-level PlugKit host implementation.
+// The RawClient allows for direct handling of plugin communication
+// by exposing decoded CBOR messages and letting the user define custom message logic
 package client
 
 import (
@@ -13,9 +19,19 @@ import (
 	"github.com/mjwhodur/plugkit/messages"
 )
 
+// RawClientImpl defines the interface that must be implemented by users of RawClient.
+// It is responsible for handling incoming messages manually.
 type RawClientImpl interface {
 	Handle(msgType string, payload []byte)
 }
+
+// RawClient provides a minimalistic PlugKit host implementation.
+// Unlike SmartPlugClient, it does not automatically decode or route messages by type.
+//
+// Instead, it allows the user to implement their own message handler via RawClientImpl.
+// This enables advanced use cases or full control over the plugin protocol.
+//
+// Communication occurs over CBOR-encoded envelopes using stdin and stdout pipes.
 type RawClient struct {
 	encoder *cbor.Encoder
 	decoder *cbor.Decoder
@@ -24,6 +40,10 @@ type RawClient struct {
 	isReady bool
 }
 
+// StartLocal starts the plugin process using the configured command.
+//
+// It establishes CBOR-based communication over stdin/stdout pipes.
+// The method must be called before sending any commands to the plugin.
 func (c *RawClient) StartLocal() error {
 	if c.command == "" {
 		return errors.New("command executable is required")
@@ -124,6 +144,9 @@ func (c *RawClient) RunCommand(name codes.MessageCode, v any) (codes.PluginExitR
 
 }
 
+// respond sends a response message to the plugin using a predefined MessageCode.
+//
+// This helper wraps the provided payload into a PlugKit Envelope and sends it over stdout.
 func (c *RawClient) respond(messageCode codes.MessageCode, v any) error {
 	// FIXME: Lacking test?
 	err := c.encoder.Encode(messages.Envelope{
