@@ -13,6 +13,21 @@ import (
 	"github.com/mjwhodur/plugkit/messages"
 )
 
+// RawStreamPlugImpl is the interface that every raw plug implementation must satisfy.
+//
+// Handle receives the raw CBOR payload extracted from the envelope and returns:
+// - a message code indicating the result (e.g., "ok", "unsupported", custom-defined, etc.),
+// - a CBOR-encoded response payload to be sent back to the host,
+// - or an error, which will cause the RawPlug to send a operation failure response to the host.
+//
+// If an error is returned from Handle, the plug is considered to have failed the request.
+// In all other cases, the message is treated as successfully handled,
+// even if the operation type was unknown or invalid — it's up to the plugin to decide how to respond.
+// This is intentional, as RawStreamPlug provides no automatic validation or dispatching — full control is left to the implementer.
+//
+// Mount is called once at startup and provides the plugin with access to its host context,
+// which can be used to configure or initialize internal state.
+// CloseSignal is called when the plug receives external shutdown signal (i.e. OS, plug host etc).
 type RawStreamPlugImpl interface {
 	Handle(kind string, payload cbor.RawMessage)
 	Mount(c *RawStreamPlug)
@@ -36,6 +51,7 @@ func NewRawStreamPlug(impl RawStreamPlugImpl) *RawStreamPlug {
 	}
 }
 
+// Main starts the main loop of the RawStreamPlug.
 func (p *RawStreamPlug) Main() {
 	p.PlugImpl.Mount(p)
 	p.decoder = cbor.NewDecoder(os.Stdin)
@@ -49,6 +65,7 @@ func (p *RawStreamPlug) Main() {
 	p.wg.Wait()
 }
 
+// Send sends an Envelope with the message code and CBOR payload to stdout.
 func (p *RawStreamPlug) Send(messageCode string, payload cbor.RawMessage) {
 	err := p.encoder.Encode(messages.Envelope{
 		Version: 1,
@@ -61,6 +78,11 @@ func (p *RawStreamPlug) Send(messageCode string, payload cbor.RawMessage) {
 	}
 }
 
+// Loop contains the main logic of the RawStreamPlug. It takes care of decoding the incoming
+// CBOR payload and sends it to handler asynchronously.
+// Handler must decode the type of the message and respond accordingly. This plug type does
+// not guarantee the order of incoming and outgoing messages.
+// It is up to implementer to handle logic.
 func (p *RawStreamPlug) Loop() {
 
 loop:
@@ -106,6 +128,8 @@ func (p *RawStreamPlug) responseWrapper(msg messages.Envelope) {
 
 }
 
+// Shutdown sends signal to shut down the plug. As the plug can be long living, it has to have a control mechanism
+// to shut down the plug from the implementation.
 func (p *RawStreamPlug) Shutdown() {
 	p.cancel()
 }

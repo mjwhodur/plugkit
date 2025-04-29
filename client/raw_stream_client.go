@@ -1,4 +1,7 @@
-// Copyright (c) 2025 Michał Hodur
+// Package client
+//
+
+// `Copyright (c) 2025 Michał Hodur
 // SPDX-License-Identifier: MIT
 package client
 
