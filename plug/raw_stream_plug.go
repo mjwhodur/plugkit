@@ -34,6 +34,20 @@ type RawStreamPlugImpl interface {
 	CloseSignal()
 }
 
+// RawStreamPlug is a low-level CBOR-based plugin communication framework.
+//
+// It provides raw input/output streams without automatic validation or message dispatching.
+// The plugin implementation (RawStreamPlugImpl) is fully responsible for interpreting incoming messages
+// and producing appropriate responses.
+//
+// RawStreamPlug handles system signals (e.g., SIGINT, SIGTERM) and supports graceful shutdown via internal signals.
+// Each incoming message is processed asynchronously in its own goroutine.
+// Ordering of responses is not guaranteed and must be handled by the plugin if needed.
+//
+// Usage:
+//   - Initialize RawStreamPlug with a RawStreamPlugImpl implementation.
+//   - Call Main() to start the event loop.
+//   - Call Shutdown() to terminate the plug from the implementation.
 type RawStreamPlug struct {
 	PlugImpl RawStreamPlugImpl
 	decoder  *cbor.Decoder
