@@ -60,9 +60,18 @@ lint: $(GOLANGCI_LINT)
 	@$(GOLANGCI_LINT) run
 
 update-golangci:
-	@curl curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
 
 format:
 	@$(GOLANGCI_LINT) run --fix
 
-pregit: format test clean
+release-notes:
+	git-cliff > CHANGELOG.md
+
+pregit: format test clean release-notes
+
+cargo-brew:
+	brew install rust
+
+cliff-install:
+	cargo install git-cliff
